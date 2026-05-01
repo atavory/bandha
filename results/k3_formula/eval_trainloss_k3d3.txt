@@ -1,0 +1,6 @@
+=== Train-loss eval (100 envs, T=200, K=3, prior=formula) ===
+  Accuracy:       55.6%  (random = 33.3%)
+  Accuracy F20:   61.2%
+  Regret norm:    0.526  (1.0 = random)
+  Regret early:   0.2920
+  Regret late:    0.2117

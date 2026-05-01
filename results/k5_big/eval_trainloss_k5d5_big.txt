@@ -1,0 +1,18 @@
+[2026-05-01T04:37:17.623-07:00] Buck UI: https://www.internalfb.com/buck2/9e831026-b983-47e2-a424-a4eec1c6da42
+[2026-05-01T04:37:17.744-07:00] Network: Up: 0B  Down: 0B
+W0501 04:37:22.242000 3403647 /home/atavory/sd-checkouts/t2/fbcode/caffe2/torch/_native/triton_utils.py:80] triton version 3.5.0+fb is not sufficient (>= (3.6.*)); set TORCH_NATIVE_SKIP_VERSION_CHECK=1 to override
+INFO:2026-05-01 04:37:22 3403647:3403647 CuptiCallbackApi.cpp:69] Callback: domain = 3, cbid = 1
+INFO:2026-05-01 04:37:22 3403647:3403647 CuptiActivityProfiler.cpp:96] CUDA versions. CUPTI: 22; Runtime: 12040; Driver: 13000
+INFO:2026-05-01 04:37:22 3403647:3404559 FBConfig.cpp:330] Perfetto builder enabled: 1
+INFO:2026-05-01 04:37:22 3403647:3404559 DynoConfigLoader.cpp:61] Setting communication fabric enabled = 0
+/home/atavory/sd-checkouts/t2/buck-out/v2/art/fbcode/ca5339275a6d38bf/band_pfn/system/__eval__/eval#link-tree/band_pfn/algs/model.py:47: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
+Loaded /home/atavory/sd-checkouts/t2/fbcode/bandit_pfn_v9_formula_k5d5_big_seed42.pt (K=5, d=5, prior=formula)
+INFO:2026-05-01 04:37:23 3403647:3404559 DynoConfigLoader.cpp:61] Setting communication fabric enabled = 0
+
+=== Train-loss eval (100 envs, T=200, K=5, prior=formula) ===
+  Accuracy:       25.8%  (random = 20.0%)
+  Accuracy F20:   26.3%
+  Regret norm:    0.848  (1.0 = random)
+  Regret early:   0.5037
+  Regret late:    0.4828

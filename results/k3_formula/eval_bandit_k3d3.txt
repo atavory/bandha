@@ -1,0 +1,11 @@
+=== Bandit eval (100 envs, T=200, K=3, 3 seeds, prior=formula) ===
+      Method  T=  10  T=  20  T=  50  T= 100  T= 200
+----------------------------------------------------
+         PFN     4.3     8.6    19.4    32.2    56.8
+       LinTS     4.4     8.5    19.6    35.0    63.1
+      LinUCB     4.0     7.7    16.8    30.5    56.4
+   EpsGreedy     4.1     8.5    21.4    42.3    83.0
+      Random     4.3     8.9    22.3    44.6    89.0
+  PFN vs LinTS: 213/300 wins (71%)
+  PFN vs LinUCB: 171/300 wins (57%)
+  PFN vs Random: 282/300 wins (94%)

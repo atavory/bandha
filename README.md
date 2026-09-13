@@ -33,6 +33,12 @@ python3 eval.py --checkpoint path/to/checkpoint.pt --mode bandit --T 200
 Large trained checkpoints are not stored in this repository. The included CSVs
 record the result summaries used by the paper.
 
+## Anonymous Review Snapshot
+
+An anonymized snapshot for review is available at:
+
+https://anonymous.4open.science/r/bandha-4D3D/
+
 ## Contents
 
 | Path | Description |

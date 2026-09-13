@@ -1,7 +1,7 @@
 """Plot regret curves from parsed eval CSVs.
 
 Usage:
-    python3 scripts/plot_regret_curves.py \
+    python plot_regret_curves.py \
         --csvs results/parsed/k3_mixed/eval_bandit_mixed_k3d3_warmstart.csv \
         --title "K=3 Mixed" \
         --output figures/regret_k3_mixed.pdf

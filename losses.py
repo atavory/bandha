@@ -11,7 +11,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
-
 from envs import BanditEnv, make_env
 from model import BanditPFN
 
@@ -96,7 +95,6 @@ def loss_fn(
 
     # metrics
     split = T // 2
-    tail = max(T // 4, 1)
     with torch.no_grad():
         chosen = logits.argmax(dim=-1)
         best = arm_means.argmax(dim=-1)
@@ -111,7 +109,10 @@ def loss_fn(
             "regret_early": soft_regret[:, :split].mean().item(),
             "regret_late": soft_regret[:, split:].mean().item(),
             "accuracy": (chosen == best).float().mean().item(),
-            "accuracy_final20": (chosen[:, -20:] == best[:, -20:]).float().mean().item(),
+            "accuracy_final20": (chosen[:, -20:] == best[:, -20:])
+            .float()
+            .mean()
+            .item(),
             "random_regret": max(random_regret, 1e-8),
             "regret_norm": float(soft_regret.mean().item()) / max(random_regret, 1e-8),
         },
@@ -121,6 +122,7 @@ def loss_fn(
 # ---------------------------------------------------------------------------
 # Bandit eval: online sequential rollout vs baselines
 # ---------------------------------------------------------------------------
+
 
 def random_policy(history, ctx, K):
     return int(np.random.randint(K))
@@ -135,6 +137,7 @@ def epsilon_greedy(eps=0.1):
             arm_rewards.setdefault(a, []).append(r)
         means = [np.mean(arm_rewards.get(k, [0.0])) for k in range(K)]
         return int(np.argmax(means))
+
     return policy
 
 
@@ -152,6 +155,7 @@ def lin_ucb(alpha=1.0):
             theta = A_inv @ b[k]
             vals.append(ctx @ theta + alpha * np.sqrt(ctx @ A_inv @ ctx))
         return int(np.argmax(vals))
+
     return policy
 
 
@@ -169,6 +173,7 @@ def lin_ts(v_sq=1.0):
             theta_hat = A_inv @ b[k]
             samples.append(ctx @ np.random.multivariate_normal(theta_hat, v_sq * A_inv))
         return int(np.argmax(samples))
+
     return policy
 
 
@@ -184,6 +189,7 @@ def make_pfn_policy(model, device):
                 reward_vecs[0, i + 1, a] = r + 1
         contexts[0, T - 1, :d] = torch.tensor(ctx, dtype=torch.float32)
         return model.select_arm(contexts, reward_vecs, T - 1).item()
+
     return policy
 
 
@@ -191,6 +197,47 @@ def make_pfn_policy(model, device):
 class BanditResult:
     regret_table: dict[str, dict[int, list]]
     checkpoints: list[int]
+
+
+def make_checkpoints(T: int) -> list[int]:
+    checkpoints = [t for t in [10, 20, 50, 100, 200, 500, 1000] if t <= T]
+    if not checkpoints:
+        checkpoints = [T]
+    return checkpoints
+
+
+def rollout_policy(
+    env: BanditEnv,
+    policy_fn,
+    *,
+    T: int,
+    checkpoints: list[int],
+) -> dict[int, float]:
+    history = []
+    cum_regret = 0.0
+    results = {}
+    for t in range(T):
+        ctx = env.contexts[t].numpy()
+        arm = policy_fn(history, ctx, env.K)
+        reward = env.step(t, arm)
+        cum_regret += env.regret(t, arm)
+        history.append((ctx, arm, reward))
+        if t + 1 in checkpoints:
+            results[t + 1] = cum_regret
+    return results
+
+
+def make_handoff_policy(
+    first_policy,
+    second_policy,
+    handoff_at: int,
+):
+    def policy(history, ctx, K):
+        if len(history) < handoff_at:
+            return first_policy(history, ctx, K)
+        return second_policy(history, ctx, K)
+
+    return policy
 
 
 def bandit_loss_fn(
@@ -204,9 +251,7 @@ def bandit_loss_fn(
     prior_type: str = "formula",
 ) -> BanditResult:
     model.eval()
-    checkpoints = [t for t in [10, 20, 50, 100, 200, 500] if t <= T]
-    if not checkpoints:
-        checkpoints = [T]
+    checkpoints = make_checkpoints(T)
 
     policies = {
         "PFN": make_pfn_policy(model, device),
@@ -217,6 +262,9 @@ def bandit_loss_fn(
     }
     all_results = {name: {t: [] for t in checkpoints} for name in policies}
 
+    import time as _time
+
+    _t0 = _time.time()
     for env_id in range(n_envs):
         rng = np.random.default_rng(env_id * 1000)
         env = make_env(K=K, d=d, n=T, rng=rng, prior_type=prior_type)
@@ -224,18 +272,76 @@ def bandit_loss_fn(
             for pi, (name, fn) in enumerate(policies.items()):
                 np.random.seed(env_id * 100000 + seed * 100 + pi)
                 torch.manual_seed(env_id * 100000 + seed * 100 + pi)
-                history = []
-                cum_regret = 0.0
-                results = {}
-                for t in range(T):
-                    ctx = env.contexts[t].numpy()
-                    arm = fn(history, ctx, env.K)
-                    reward = env.step(t, arm)
-                    cum_regret += env.regret(t, arm)
-                    history.append((ctx, arm, reward))
-                    if t + 1 in checkpoints:
-                        results[t + 1] = cum_regret
+                results = rollout_policy(env, fn, T=T, checkpoints=checkpoints)
                 for t in checkpoints:
                     all_results[name][t].append(results[t])
+        if (env_id + 1) % 10 == 0 or env_id == 0:
+            elapsed = _time.time() - _t0
+            eta = elapsed / (env_id + 1) * (n_envs - env_id - 1)
+            print(
+                f"  bandit eval: {env_id + 1}/{n_envs} envs, "
+                f"{elapsed:.0f}s elapsed, ~{eta:.0f}s remaining",
+                flush=True,
+            )
+
+    return BanditResult(regret_table=all_results, checkpoints=checkpoints)
+
+
+def handoff_bandit_loss_fn(
+    model: BanditPFN,
+    n_envs: int,
+    K: int,
+    d: int,
+    T: int,
+    n_seeds: int,
+    device: torch.device,
+    handoff_ats: list[int],
+    prior_type: str = "formula",
+) -> BanditResult:
+    model.eval()
+    checkpoints = make_checkpoints(T)
+
+    pfn_policy = make_pfn_policy(model, device)
+    base_lin_ts = lin_ts()
+    base_lin_ucb = lin_ucb()
+
+    policies = {
+        "PFN": pfn_policy,
+        "LinTS": base_lin_ts,
+        "LinUCB": base_lin_ucb,
+    }
+    for handoff_at in handoff_ats:
+        if handoff_at >= T:
+            continue
+        policies[f"PFN->LinTS@{handoff_at}"] = make_handoff_policy(
+            pfn_policy, base_lin_ts, handoff_at
+        )
+        policies[f"PFN->LinUCB@{handoff_at}"] = make_handoff_policy(
+            pfn_policy, base_lin_ucb, handoff_at
+        )
+
+    all_results = {name: {t: [] for t in checkpoints} for name in policies}
+
+    import time as _time
+
+    _t0 = _time.time()
+    for env_id in range(n_envs):
+        rng = np.random.default_rng(env_id * 1000)
+        env = make_env(K=K, d=d, n=T, rng=rng, prior_type=prior_type)
+        for seed in range(n_seeds):
+            for pi, (name, fn) in enumerate(policies.items()):
+                np.random.seed(env_id * 100000 + seed * 100 + pi)
+                torch.manual_seed(env_id * 100000 + seed * 100 + pi)
+                results = rollout_policy(env, fn, T=T, checkpoints=checkpoints)
+                for t in checkpoints:
+                    all_results[name][t].append(results[t])
+        if (env_id + 1) % 10 == 0 or env_id == 0:
+            elapsed = _time.time() - _t0
+            eta = elapsed / (env_id + 1) * (n_envs - env_id - 1)
+            print(
+                f"  handoff eval: {env_id + 1}/{n_envs} envs, "
+                f"{elapsed:.0f}s elapsed, ~{eta:.0f}s remaining",
+                flush=True,
+            )
 
     return BanditResult(regret_table=all_results, checkpoints=checkpoints)

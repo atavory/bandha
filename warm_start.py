@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import torch
+import torch.nn as nn
 from model import BanditPFN
 
 
@@ -16,7 +17,7 @@ class WarmStartSummary:
 
 
 def _copy_matching_tensors(
-    model: BanditPFN,
+    model: nn.Module,
     source_state: dict[str, torch.Tensor],
 ) -> tuple[list[str], list[str]]:
     copied: list[str] = []
@@ -33,14 +34,18 @@ def _copy_matching_tensors(
 
 
 def _copy_input_projection(
-    model: BanditPFN,
+    model: nn.Module,
     source_state: dict[str, torch.Tensor],
     source_d_ctx: int,
     source_k: int,
 ) -> list[str]:
     copied: list[str] = []
     weight = source_state.get("input_proj.weight")
-    if weight is not None and weight.shape[0] == model.input_proj.weight.shape[0]:
+    if (
+        hasattr(model, "input_proj")
+        and weight is not None
+        and weight.shape[0] == model.input_proj.weight.shape[0]
+    ):
         dst = model.input_proj.weight.data
         ctx_cols = min(source_d_ctx, model.d_ctx)
         if ctx_cols > 0:
@@ -57,7 +62,7 @@ def _copy_input_projection(
 
 
 def load_warm_start(
-    model: BanditPFN,
+    model: nn.Module,
     checkpoint_path: str,
     map_location: str | torch.device = "cpu",
 ) -> WarmStartSummary:

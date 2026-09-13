@@ -1,7 +1,7 @@
 """Parse bandit eval .txt files into structured CSVs.
 
 Usage:
-    python3 scripts/parse_eval.py results/ --output results/parsed/
+    python parse_eval.py results/ --output results/parsed/
 """
 
 from __future__ import annotations

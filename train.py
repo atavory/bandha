@@ -4,8 +4,8 @@ Pure PyTorch, no TorchTNT. Generates random trajectories, one forward
 pass with causal mask, CE on soft arm targets.
 
 Usage:
-    python3 -m band_pfn.algs.train --smoke
-    python3 -m band_pfn.algs.train --K 3 --d 3 --T 200 --epochs 100
+    python3 train.py --smoke
+    python3 train.py --K 3 --d 3 --T 200 --epochs 100
 """
 
 from __future__ import annotations
@@ -21,9 +21,11 @@ import torch
 from envs import make_env
 from losses import loss_fn
 from model import BanditPFN
+from model_perarm import BanditPFNPerArm
 from warm_start import load_warm_start
 
 CHECKPOINT_STRUCTURAL_KEYS = (
+    "model_arch",
     "K",
     "T",
     "d",
@@ -111,7 +113,7 @@ def truncate_log_to_epoch(log_path: Path, max_epoch: int) -> None:
 def save_checkpoint(
     path: Path,
     *,
-    model: BanditPFN,
+    model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     scaler: torch.cuda.amp.GradScaler | None,
@@ -204,8 +206,9 @@ def move_optimizer_state_to_device(
                 state[key] = value.to(device)
 
 
-def build_model(args: argparse.Namespace, device: torch.device) -> BanditPFN:
-    return BanditPFN(
+def build_model(args: argparse.Namespace, device: torch.device) -> torch.nn.Module:
+    model_cls = BanditPFNPerArm if args.model_arch == "perarm" else BanditPFN
+    return model_cls(
         d_ctx=args.d,
         K=args.K,
         d_model=args.d_model,
@@ -240,6 +243,7 @@ def main(argv=None):
     parser.add_argument("--n-layers", type=int, default=4)
     parser.add_argument("--n-heads", type=int, default=4)
     parser.add_argument("--ff-mult", type=int, default=4)
+    parser.add_argument("--model-arch", choices=["v9", "perarm"], default="perarm")
     parser.add_argument("--dropout", type=float, default=0.0)
     parser.add_argument("--activation-checkpointing", action="store_true")
     parser.add_argument("--precision", choices=["fp32", "bf16", "fp16"], default="fp32")
@@ -263,7 +267,7 @@ def main(argv=None):
         args.batch_size = 8
         args.d_model = 64
         args.n_layers = 2
-        args.tag = "v9_smoke"
+        args.tag = f"{args.model_arch}_smoke"
 
     if args.grad_accum_steps < 1:
         raise ValueError("--grad-accum-steps must be >= 1")
@@ -310,7 +314,7 @@ def main(argv=None):
         )
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"BanditPFN v9: {n_params:,} params | device={device}")
+    print(f"BanditPFN {args.model_arch}: {n_params:,} params | device={device}")
     print(f"K={args.K} d={args.d} T={args.T} prior={args.prior_type}")
     print(f"n_envs={args.n_envs} epochs={args.epochs} batch={args.batch_size}")
     print(f"Random baseline: acc={1 / args.K:.1%}")

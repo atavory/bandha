@@ -7,10 +7,10 @@ import argparse
 import numpy as np
 import torch
 import torch.nn.functional as F
-from band_pfn.algs.envs import make_env
-from band_pfn.algs.losses import LossResult, build_reward_history
-from band_pfn.algs.model import BanditPFN
-from band_pfn.algs.model_perarm import BanditPFNPerArm
+from envs import make_env
+from losses import LossResult, build_reward_history
+from model import BanditPFN
+from model_perarm import BanditPFNPerArm
 
 
 def make_fixed_batch(

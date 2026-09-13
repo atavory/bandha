@@ -1,60 +1,72 @@
-# BANDHA: Bandit Amortized Network for Direct Handoff Acceleration
+# BANDHA
 
-A causal Transformer pretrained on synthetic bandit histories for contextual bandit warmup.
+Reference code and result tables for **BANDHA: Learned Warmup and
+Target-Conditioned Handoff for Contextual Bandits**.
+
+BANDHA trains an amortized warmup policy for repeated contextual-bandit
+instances. The implementation in this repository is the finite, discrete-arm
+tabular instantiation used in the paper: synthetic PFN-style tasks produce
+all-arm reward targets after each logged bandit episode, while the model input
+contains only the censored online history.
 
 ## Quick Start
 
 ```bash
-pip install torch numpy
-python demo.py
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+python3 demo.py
 ```
 
-## What is BANDHA?
+For a short training smoke test:
 
-Standard contextual bandit algorithms (LinUCB, Thompson Sampling) explore from scratch
-in every new environment. BANDHA pretrains a causal Transformer on diverse synthetic
-bandit histories, learning to predict the correct arm from partial feedback. At deployment,
-it handles the critical first ~200 rounds where uninformed exploration wastes the most budget,
-then hands off to a conventional algorithm for asymptotic optimality.
+```bash
+python3 train.py --smoke
+```
 
-### Key ideas
+For evaluation from a checkpoint:
 
-1. **Synthetic pretraining with counterfactual access.** During training, the full reward
-   table is known, enabling dense supervision on all arms — not just the one that was pulled.
+```bash
+python3 eval.py --checkpoint path/to/checkpoint.pt --mode bandit --T 200
+```
 
-2. **Soft arm targets.** Gaussian CDF binning of a latent regression function provides
-   smooth, geometry-preserving supervision.
+Large trained checkpoints are not stored in this repository. The included CSVs
+record the result summaries used by the paper.
 
-3. **Teacher-forced training.** One parallel forward pass with a causal mask, no sequential
-   rollout during training. The model sees logged random histories and predicts the correct
-   arm at every position.
+## Contents
 
-4. **Greedy deployment.** At inference, the model selects arms by argmax. No Thompson Sampling
-   or UCB — the amortized prior is strong enough that exploitation beats uninformed exploration.
+| Path | Description |
+| --- | --- |
+| `envs.py` | Synthetic tabular contextual-bandit task generation |
+| `model.py` | Sequence baseline model |
+| `model_perarm.py` | Permutation-equivariant per-arm state model |
+| `losses.py` | Soft-feedback loss and online bandit evaluation helpers |
+| `train.py` | Standalone training loop |
+| `eval.py` | Synthetic evaluation from a saved checkpoint |
+| `eval_realworld.py` | OpenML classification-to-bandit evaluation |
+| `results/submission_20260901/` | Frozen synthetic and handoff result summaries |
+| `results/realworld_perarm_pca3/` | Real-world classification transfer summaries |
 
-## Files
+## Scope
 
-| File | Description |
-|------|-------------|
-| `envs.py` | Environment generation from PFNs-style synthetic priors |
-| `model.py` | Causal Transformer architecture |
-| `losses.py` | Training loss (soft CE) and bandit evaluation |
-| `train.py` | Training loop |
-| `eval.py` | Evaluation (offline + online bandit regret) |
-| `demo.py` | End-to-end demo |
+The code here is intentionally standalone and public-facing. Internal
+orchestration, cluster runners, process logs, private paths, and model
+checkpoints are excluded. The general BANDHA recipe can use other task
+generators or reward spaces, but this repository focuses on the tabular
+probability-vector target tested in the paper.
 
 ## Citation
 
 ```bibtex
-@inproceedings{bandha2027,
-  title     = {{BANDHA}: Bandit Amortized Network for Direct Handoff Acceleration},
+@inproceedings{bandha2026,
+  title     = {{BANDHA}: Learned Warmup and Target-Conditioned Handoff for Contextual Bandits},
   author    = {Anonymous},
   booktitle = {International Conference on Learning Representations},
-  year      = {2027},
+  year      = {2026},
 }
 ```
 
 ## Acknowledgments
 
-Environment generation adapted from the [PFNs](https://github.com/SamuelGabriel/PFNs)
-synthetic prior framework (Apache-2.0).
+Synthetic task generation follows the prior-fitted network line of work,
+including PFNs and TabPFN.

@@ -7,7 +7,7 @@ Each multiclass dataset becomes a contextual bandit:
   - features projected to d_model dimensions via PCA if d > d_model
 
 Usage:
-    python3 scripts/eval_realworld.py \
+    python3 eval_realworld.py \
         --checkpoint path/to/checkpoint.pt \
         --dataset covertype \
         --T 200 --n-seeds 3 \
@@ -28,7 +28,7 @@ from sklearn.datasets import fetch_openml
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
-from band_pfn.algs.losses import (
+from losses import (
     BanditResult,
     epsilon_greedy,
     lin_ts,
@@ -38,8 +38,9 @@ from band_pfn.algs.losses import (
     random_policy,
     rollout_policy,
 )
-from band_pfn.algs.envs import BanditEnv
-from band_pfn.algs.model import BanditPFN
+from envs import BanditEnv
+from model import BanditPFN
+from model_perarm import BanditPFNPerArm
 
 
 @dataclass
@@ -181,6 +182,37 @@ def run_realworld_eval(
     return BanditResult(regret_table=all_results, checkpoints=checkpoints)
 
 
+def build_model_from_checkpoint(
+    checkpoint_args: dict,
+    *,
+    K: int,
+    device: torch.device,
+) -> torch.nn.Module:
+    model_arch = checkpoint_args.get("model_arch", "v9")
+    if model_arch == "perarm":
+        model_cls = BanditPFNPerArm
+        model_k = K
+    else:
+        if K != checkpoint_args["K"]:
+            raise ValueError(
+                f"Fixed-K checkpoint has K={checkpoint_args['K']} but dataset has K={K}"
+            )
+        model_cls = BanditPFN
+        model_k = checkpoint_args["K"]
+
+    return model_cls(
+        d_ctx=checkpoint_args["d"],
+        K=model_k,
+        d_model=checkpoint_args["d_model"],
+        n_heads=checkpoint_args["n_heads"],
+        n_layers=checkpoint_args["n_layers"],
+        ff_mult=checkpoint_args.get("ff_mult", 4),
+        dropout=checkpoint_args.get("dropout", 0.0),
+        max_T=checkpoint_args.get("max_T", max(checkpoint_args["T"], 1024)),
+        activation_checkpointing=checkpoint_args.get("activation_checkpointing", False),
+    ).to(device)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", required=True)
@@ -203,26 +235,10 @@ def main():
 
     ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
     ca = ckpt["args"]
-    model = BanditPFN(
-        d_ctx=ca["d"],
-        K=ca["K"],
-        d_model=ca["d_model"],
-        n_heads=ca["n_heads"],
-        n_layers=ca["n_layers"],
-        ff_mult=ca.get("ff_mult", 4),
-        dropout=ca.get("dropout", 0.0),
-        max_T=ca.get("max_T", max(ca["T"], 1024)),
-    ).to(device)
-    model.load_state_dict(ckpt["model_state_dict"])
 
     X, y, K_data = load_real_dataset(args.dataset)
-
-    if K_data != ca["K"]:
-        print(
-            f"WARNING: dataset has {K_data} classes but model trained on K={ca['K']}. "
-            f"Skipping — need a model with matching K."
-        )
-        return
+    model = build_model_from_checkpoint(ca, K=K_data, device=device)
+    model.load_state_dict(ckpt["model_state_dict"])
 
     d_model_ctx = ca["d"]
     pca = None

@@ -1,7 +1,7 @@
 """Plot model scaling: regret vs model size.
 
 Usage:
-    python3 scripts/plot_scaling.py --output figures/scaling.pdf
+    python plot_scaling.py --output figures/scaling.pdf
 """
 
 from __future__ import annotations

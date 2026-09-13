@@ -33,6 +33,27 @@ python3 eval.py --checkpoint path/to/checkpoint.pt --mode bandit --T 200
 Large trained checkpoints are not stored in this repository. The included CSVs
 record the result summaries used by the paper.
 
+## Real-World Evaluation
+
+The real-data pipeline used for the paper is included in `eval_realworld.py`.
+It converts multiclass classification datasets into contextual bandits by
+encoding labels as arms and giving reward 1 only when the selected arm matches
+the class label. Numeric features are standardized and, for the paper-facing
+protocol, projected to the fixed `d_ctx=3` interface with PCA before rollout.
+
+Example:
+
+```bash
+python3 eval_realworld.py \
+  --checkpoint path/to/checkpoint.pt \
+  --dataset covertype \
+  --T 200 \
+  --n-envs 30 \
+  --n-seeds 1 \
+  --use-pca \
+  --output results/realworld_perarm_pca3/covertype.csv
+```
+
 ## Anonymous Review Snapshot
 
 An anonymized snapshot for review is available at:
